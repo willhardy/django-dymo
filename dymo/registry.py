@@ -19,7 +19,6 @@ def register_dynamic_models(app_label, name, dependencies, get_models_fn):
 
 
 def get_dynamic_models(*names):
-    # If no names provided, delete all tables
     if not names:
         names = _dynamic_model_registry.keys()
     for name in names:
