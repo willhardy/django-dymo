@@ -114,23 +114,30 @@ def get_sql_schema(model, already_defined):
     if model in already_defined:
         return ''
 
+    lines = []
+
     table_name = model._meta.db_table
 
-    columns = [
-        db.column_sql(table_name, field.db_column, field)
-        for field in model._meta.fields
-    ]
-
-    lines = []
     for parent in model._meta.parents:
         defn = get_sql_schema(parent, already_defined)
         if defn:
             lines.append(defn)
 
+    columns = [
+        db.column_sql(table_name, field.db_column, field)
+        for field in model._meta.local_fields
+    ]
+
+    lines.append("--")
+    lines.append("-- %s" % model._meta.object_name)
+    lines.append("--")
+    lines.append("")
     lines.append('CREATE TABLE %s (\n    %s\n);' % (
             db.quote_name(table_name),
             ',\n    '.join([col for col in columns if col]),
         ))
+    lines.append("\n".join(db.deferred_sql))
+    lines.append("")
 
     already_defined.add(model)
 
