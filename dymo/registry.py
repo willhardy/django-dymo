@@ -3,6 +3,7 @@
 
 from django.db.models.signals import class_prepared
 from django.db.models.loading import cache as app_cache
+from django.db.utils import DatabaseError
 from south.db import db
 
 
