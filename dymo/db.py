@@ -9,6 +9,10 @@ from django.db import models
 logger = logging.getLogger('dymo')
 
 
+def update_table(model_class):
+    create_db_table(model_class)
+    add_necessary_db_columns(model_class)
+
 def create_db_table(model_class):
     """ Takes a Django model class and create a database table, if necessary.
     """
