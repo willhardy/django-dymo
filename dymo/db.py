@@ -34,6 +34,7 @@ def create_db_table(model_class):
         logger.debug("Created table '%s'" % table_name)
 
     db.commit_transaction()
+    db.send_create_signal(model_class._meta.app_label, [model_class._meta.object_name])
 
 
 def delete_db_table(model_class):
@@ -79,8 +80,12 @@ def add_necessary_db_columns(model_class):
 
 def rename_db_column(table_name, old_name, new_name):
     """ Rename a sensor's database column. """
-    db.start_transaction()
     db.rename_column(table_name, old_name, new_name) 
     logger.debug("Renamed column '%s' to '%s' on %s" % (old_name, new_name, table_name))
-    db.commit_transaction()
+
+
+def rename_db_table(old_table_name, new_table_name):
+    """ Rename a sensor's database column. """
+    db.rename_table(old_table_name, new_table_name)
+    logger.debug("Renamed table '%s' to '%s'" % (old_table_name, new_table_name))
 
