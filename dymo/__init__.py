@@ -7,3 +7,4 @@ from dymo.db import create_db_table, delete_db_table, add_necessary_db_columns, 
 from dymo.registry import when_classes_prepared, get_dynamic_models, register_dynamic_models
 from dymo.sync import get_cached_model, remove_from_model_cache, notify_model_change, dynamic_model_changed
 from dymo.admin import unregister_from_admin, reregister_in_admin, propogate_permissions
+from dymo.fields import IdentifierSlugField
