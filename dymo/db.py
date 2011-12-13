@@ -37,12 +37,21 @@ def create_db_table(model_class):
     db.send_create_signal(model_class._meta.app_label, [model_class._meta.object_name])
 
 
+DELETED_PREFIX = "_table_"
+
+def get_deleted_tables():
+    return [t for t in connection.introspection.table_names() 
+                                    if t.startswith(DELETED_PREFIX)]
+
+def get_deleted_columns(table_name):
+    rows = connection.introspection.get_table_description(connection.cursor(), table_name)
+    return [r[0] for r in rows if r[0].startswith(DELETED_PREFIX)]
+
+
 def delete_db_table(model_class):
     table_name = model_class._meta.db_table
-    db.start_transaction()
     db.delete_table(table_name)
     logger.debug("Deleted table '%s'" % table_name)
-    db.commit_transaction()
 
 
 def _get_fields(model_class):

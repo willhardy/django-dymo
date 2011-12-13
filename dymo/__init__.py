@@ -8,3 +8,4 @@ from dymo.registry import when_classes_prepared, get_dynamic_models, register_dy
 from dymo.sync import get_cached_model, remove_from_model_cache, notify_model_change, dynamic_model_changed, HASH_CACHE_TEMPLATE
 from dymo.admin import unregister_from_admin, reregister_in_admin, propogate_permissions
 from dymo.fields import IdentifierSlugField
+from dymo.signals import connect_column_migration_signals, connect_table_migration_signals
