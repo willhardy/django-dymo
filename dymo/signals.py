@@ -26,7 +26,7 @@ def connect_column_migration_signals(model_class, col_attr, get_model_name, get_
     post_delete.connect(_post_delete, sender=model_class)
 
 
-def connect_table_migration_signals(model_class, model_name_attr, table_name_attr=None, app_label=None)
+def connect_table_migration_signals(model_class, model_name_attr, table_name_attr=None, app_label=None):
     _pre_save = build_table_pre_save(model_name_attr, table_name_attr)
     _post_save = build_table_post_save(model_name_attr, table_name_attr, app_label)
     _post_delete = build_table_post_delete(model_name_attr, table_name_attr, app_label)
