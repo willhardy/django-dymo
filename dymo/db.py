@@ -17,13 +17,12 @@ def create_db_table(model_class):
     """ Takes a Django model class and create a database table, if necessary.
     """
     # XXX Create related tables for ManyToMany etc
-
-    db.start_transaction()
     table_name = model_class._meta.db_table
 
     # Introspect the database to see if it doesn't already exist
     if (connection.introspection.table_name_converter(table_name) 
                         not in connection.introspection.table_names()):
+        db.start_transaction()
 
         fields = _get_fields(model_class)
 
@@ -33,11 +32,11 @@ def create_db_table(model_class):
         db.execute_deferred_sql()
         logger.debug("Created table '%s'" % table_name)
 
-    db.commit_transaction()
+        db.commit_transaction()
     db.send_create_signal(model_class._meta.app_label, [model_class._meta.object_name])
 
 
-DELETED_PREFIX = "_table_"
+DELETED_PREFIX = "_deleted_"
 
 def get_deleted_tables():
     return [t for t in connection.introspection.table_names() 
@@ -48,10 +47,14 @@ def get_deleted_columns(table_name):
     return [r[0] for r in rows if r[0].startswith(DELETED_PREFIX)]
 
 
-def delete_db_table(model_class):
-    table_name = model_class._meta.db_table
+def delete_db_table(table_name):
     db.delete_table(table_name)
     logger.debug("Deleted table '%s'" % table_name)
+
+
+def delete_db_column(table_name, column_name):
+    db.delete_column(table_name)
+    logger.debug("Deleted column '%s.%s'" % (table_name, column_name))
 
 
 def _get_fields(model_class):
@@ -89,12 +92,16 @@ def add_necessary_db_columns(model_class):
 
 def rename_db_column(table_name, old_name, new_name):
     """ Rename a sensor's database column. """
+    db.start_transaction()
     db.rename_column(table_name, old_name, new_name) 
     logger.debug("Renamed column '%s' to '%s' on %s" % (old_name, new_name, table_name))
+    db.commit_transaction()
 
 
 def rename_db_table(old_table_name, new_table_name):
     """ Rename a sensor's database column. """
+    db.start_transaction()
     db.rename_table(old_table_name, new_table_name)
     logger.debug("Renamed table '%s' to '%s'" % (old_table_name, new_table_name))
+    db.commit_transaction()
 

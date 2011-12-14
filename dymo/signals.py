@@ -5,8 +5,9 @@
 """
 
 from django.db.models.signals import pre_save, post_save, post_delete
+from django.db import transaction
 
-from dymo.db import rename_db_column, rename_db_table
+from dymo.db import rename_db_column, rename_db_table, delete_db_table, delete_db_column
 from dymo.db import get_deleted_tables, get_deleted_columns, DELETED_PREFIX
 from dymo.sync import notify_model_change
 from dymo.models import DeletedColumn, DeletedTable
@@ -16,24 +17,36 @@ OLD_TABLE_NAME_ATTR = "_dymo_old_table_name"
 OLD_MODEL_NAME_ATTR = "_dymo_old_model_name"
 
 
-def connect_column_migration_signals(model_class, col_attr, get_model_name, get_table_name, app_label=None):
+def connect_column_migration_signals(model_class, col_attr, get_model_name, get_table_name, app_label=None, soft_delete=True):
+    """ Connects signals to perform migration when column name has been changed or the column has been deleted.
+        Optionally, a soft delete can be set, which only renames the column out of the way.
+    """
     _pre_save = build_column_pre_save(col_attr, get_model_name, get_table_name)
+    pre_save.connect(_pre_save, sender=model_class, weak=False)
+
     _post_save = build_column_post_save(col_attr, get_model_name, get_table_name, app_label)
-    _post_delete = build_column_post_delete(col_attr, get_model_name, get_table_name, app_label)
+    post_save.connect(_post_save, sender=model_class, weak=False)
 
-    pre_save.connect(_pre_save, sender=model_class)
-    post_save.connect(_post_save, sender=model_class)
-    post_delete.connect(_post_delete, sender=model_class)
+    _post_delete = build_column_post_delete(col_attr, get_model_name, get_table_name, app_label, soft_delete)
+    post_delete.connect(_post_delete, sender=model_class, weak=False)
 
 
-def connect_table_migration_signals(model_class, model_name_attr, table_name_attr=None, app_label=None):
+def connect_table_migration_signals(model_class, model_name_attr, table_name_attr=None, app_label=None, soft_delete=True):
+    """ Connects signals to perform migration when table name has been changed or the table has been deleted.
+        Optionally, a soft delete can be set, which only renames the table out of the way.
+    """
     _pre_save = build_table_pre_save(model_name_attr, table_name_attr)
-    _post_save = build_table_post_save(model_name_attr, table_name_attr, app_label)
-    _post_delete = build_table_post_delete(model_name_attr, table_name_attr, app_label)
-
     pre_save.connect(_pre_save, sender=model_class)
+
+    _post_save = build_table_post_save(model_name_attr, table_name_attr, app_label)
     post_save.connect(_post_save, sender=model_class)
-    post_delete.connect(_post_delete, sender=model_class)
+
+    # Tables are not deleted automatically (because of potential problems with related objects)
+    # Either a soft_delete is used to move the table out of the way, or nothing happens.
+    # If your system wants to delete the table, it needs to do it manually
+    if soft_delete:
+        _post_delete = build_table_post_delete(model_name_attr, table_name_attr, app_label)
+        post_delete.connect(_post_delete, sender=model_class)
 
 
 def build_column_pre_save(col_attr, get_model_name, get_table_name, query=None):
@@ -89,25 +102,43 @@ def build_column_post_save(col_attr, get_model_name, get_table_name, app_label=N
 
 
 def _get_max_deleted_index(names):
-    return max(int(filter(str.isdigit, str(n)) or 0) for n in names)
+    try:
+        return max(int(filter(str.isdigit, str(n)) or 0) for n in names)
+    except ValueError:
+        return 0
 
-def build_column_post_delete(col_attr, get_model_name, get_table_name, app_label=None):
-    def column_post_delete(sender, instance, created, **kwargs):
-        table_name = get_table_name(instance)
-        column_name = getattr(instance, col_attr)
-        max_index = _get_max_deleted_index(get_deleted_columns(table_name))
 
-        # Rename column out of the way
-        new_column_name = DELETED_PREFIX + str(max_index + 1)
-        rename_db_column(table_name, column_name, new_column_name)
+def build_column_post_delete(col_attr, get_model_name, get_table_name, app_label=None, soft_delete=True):
+    if soft_delete:
+        def column_post_delete(sender, instance, **kwargs):
+            table_name = get_table_name(instance)
+            column_name = getattr(instance, col_attr)
+            max_index = _get_max_deleted_index(get_deleted_columns(table_name))
 
-        # Log this renaming, if this functionality is available
-        if DeletedColumn:
-            log = DeletedColumn()
-            log.original_table_name = table_name
-            log.original_name = column_name
-            log.current_name = new_column_name
-            log.save()
+            # Rename column out of the way
+            new_column_name = DELETED_PREFIX + str(max_index + 1)
+            rename_db_column(table_name, column_name, new_column_name)
+
+            # Log this renaming, if this functionality is available
+            if DeletedColumn:
+                log = DeletedColumn()
+                log.original_table_name = table_name
+                log.original_name = column_name
+                log.current_name = new_column_name
+                log.save()
+
+    else:
+        def column_post_delete(sender, instance, **kwargs):
+            table_name = get_table_name(instance)
+            column_name = getattr(instance, col_attr)
+            delete_db_column(table_name, column_name)
+
+            # Log this deletion, if this functionality is available
+            if DeletedColumn:
+                log = DeletedColumn()
+                log.original_table_name = table_name
+                log.original_name = column_name
+                log.save()
 
     return column_post_delete
 
@@ -150,6 +181,7 @@ def build_table_post_save(model_name_attr, table_name_attr=None, app_label=None)
             old_name = getattr(instance, OLD_TABLE_NAME_ATTR)
             new_name = getattr(instance, table_name_attr)
             rename_db_table(old_name, new_name)
+            delattr(instance, OLD_TABLE_NAME_ATTR)
 
         # Invalidate any old definitions 
         if hasattr(instance, OLD_MODEL_NAME_ATTR):
@@ -165,12 +197,12 @@ def build_table_post_save(model_name_attr, table_name_attr=None, app_label=None)
 
         notify_model_change(app_label=_app_label, object_name=model_name, invalidate_only=True)
 
-
     return table_post_save
 
 
 def build_table_post_delete(model_name_attr, table_name_attr=None, app_label=None):
-    def table_post_delete(sender, instance, created, **kwargs):
+    """ Delete or optionally rename underlying table, logging the result if that is enabled. """
+    def table_post_delete(sender, instance, **kwargs):
         if table_name_attr:
             table_name = getattr(instance, table_name_attr)
             max_index = _get_max_deleted_index(get_deleted_tables())
