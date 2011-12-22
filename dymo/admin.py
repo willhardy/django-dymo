@@ -14,18 +14,29 @@ from django.contrib.contenttypes.models import ContentType
 logger = logging.getLogger('dymo')
 
 
-def unregister_from_admin(admin_site, model=None, old_table_name=None):
+def unregister_from_admin(admin_site, model=None, old_table_name=None, app_label=None, object_name=None):
     " Removes the dynamic model from the given admin site "
 
     if old_table_name is None and model is not None:
         old_table_name = model._meta.db_table
 
+    if app_label is None and object_name is None and model is not None:
+        app_label = model._meta.app_label
+        object_name = model._meta.object_name
+
     # First deregister the current definition
     # This is done "manually" because model will be different
     # db_table is used to check for class equivalence.
-    for reg_model in admin_site._registry.keys():
-        if old_table_name == reg_model._meta.db_table:
-            del admin_site._registry[reg_model]
+    if old_table_name:
+        for reg_model in admin_site._registry.keys():
+            if old_table_name == reg_model._meta.db_table:
+                del admin_site._registry[reg_model]
+
+    # Try looking for same app_label/object_name
+    if app_label and object_name:
+        for reg_model in admin_site._registry.keys():
+            if app_label == reg_model._meta.app_label and object_name == reg_model._meta.object_name:
+                del admin_site._registry[reg_model]
 
     # Try the normal approach too
     if model is not None:
@@ -51,17 +62,17 @@ def reregister_in_admin(admin_site, model, admin_class=None):
     unregister_from_admin(admin_site, model)
     admin_site.register(model, admin_class)
 
+    # Add any missing permissions
+    create_permissions(models.get_app(model._meta.app_label), created_models=[], verbosity=0)
+
+    propogate_permissions(model)
+
     # Reload the URL conf and clear the URL cache
     # It's important to use the same string as ROOT_URLCONF
     reload(import_module(settings.ROOT_URLCONF))
     clear_url_caches()
 
     logger.debug("(Re-)Added %r model to admin" % model.__name__)
-
-    # Add any missing permissions
-    create_permissions(models.get_app(model._meta.app_label), created_models=[], verbosity=0)
-
-    propogate_permissions(model)
 
 
 def propogate_permissions(model):

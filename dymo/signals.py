@@ -5,10 +5,11 @@
 """
 
 from django.db.models.signals import pre_save, post_save, post_delete
-from django.db import transaction
+from django.db import transaction, connection
 
 from dymo.db import rename_db_column, rename_db_table, delete_db_table, delete_db_column
 from dymo.db import get_deleted_tables, get_deleted_columns, DELETED_PREFIX
+from south.db import db
 from dymo.sync import notify_model_change
 from dymo.models import DeletedColumn, DeletedTable
 
@@ -36,17 +37,17 @@ def connect_table_migration_signals(model_class, model_name_attr, table_name_att
         Optionally, a soft delete can be set, which only renames the table out of the way.
     """
     _pre_save = build_table_pre_save(model_name_attr, table_name_attr)
-    pre_save.connect(_pre_save, sender=model_class)
+    pre_save.connect(_pre_save, sender=model_class, weak=False)
 
     _post_save = build_table_post_save(model_name_attr, table_name_attr, app_label)
-    post_save.connect(_post_save, sender=model_class)
+    post_save.connect(_post_save, sender=model_class, weak=False)
 
     # Tables are not deleted automatically (because of potential problems with related objects)
     # Either a soft_delete is used to move the table out of the way, or nothing happens.
     # If your system wants to delete the table, it needs to do it manually
     if soft_delete:
         _post_delete = build_table_post_delete(model_name_attr, table_name_attr, app_label)
-        post_delete.connect(_post_delete, sender=model_class)
+        post_delete.connect(_post_delete, sender=model_class, weak=False)
 
 
 def build_column_pre_save(col_attr, get_model_name, get_table_name, query=None):
@@ -172,8 +173,7 @@ def build_table_pre_save(model_name_attr, table_name_attr=None, query=None):
 def build_table_post_save(model_name_attr, table_name_attr=None, app_label=None):
 
     def table_post_save(sender, instance, created, **kwargs):
-        """  
-            Rename any tables and notify other processes of a potential model change.
+        """  Rename any tables and notify other processes of a potential model change.
         """
     
         # If table name changes are to be tracked, rename the database table
@@ -186,6 +186,7 @@ def build_table_post_save(model_name_attr, table_name_attr=None, app_label=None)
         # Invalidate any old definitions 
         if hasattr(instance, OLD_MODEL_NAME_ATTR):
             model_name = getattr(instance, OLD_MODEL_NAME_ATTR)
+            print "*"*80, "Invalidating old model name", getattr(instance, OLD_MODEL_NAME_ATTR)
         else:
             model_name = getattr(instance, model_name_attr)
 
@@ -207,9 +208,14 @@ def build_table_post_delete(model_name_attr, table_name_attr=None, app_label=Non
             table_name = getattr(instance, table_name_attr)
             max_index = _get_max_deleted_index(get_deleted_tables())
 
-            # Rename database table out of the way
-            new_table_name = DELETED_PREFIX + str(max_index + 1)
-            rename_db_table(table_name, new_table_name)
+            # If table exists, rename it out of the way
+            # XXX Race condition: if this table is created elsewhere
+            if (connection.introspection.table_name_converter(table_name) 
+                        in connection.introspection.table_names()):
+                new_table_name = DELETED_PREFIX + str(max_index + 1)
+                rename_db_table(table_name, new_table_name)
+            else:
+                new_table_name = ''
 
             # Log this renaming, if this functionality is available
             if DeletedTable:

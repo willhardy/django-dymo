@@ -48,21 +48,18 @@ def notify_model_change(model=None, app_label=None, object_name=None, invalidate
     if model is not None:
         app_label = model._meta.app_label
         object_name = model._meta.object_name
-        name = model._meta.verbose_name
-    else:
-        name = "%s.%s" % (app_label, object_name)
     CACHE_KEY = HASH_CACHE_TEMPLATE % (app_label, object_name) 
     if invalidate_only:
         val = None
+        #dynamic_model_changed.send(sender=None, app_label=app_label, object_name=object_name)
     elif model:
         val = local_hash(model)
         dynamic_model_changed.send(sender=model)
 
     cache.set(CACHE_KEY, val)
-    #logger.debug("Setting \"%s\" hash to: %s" % (name, val))
 
 import django.dispatch
-dynamic_model_changed = django.dispatch.Signal(providing_args=["sender"])
+dynamic_model_changed = django.dispatch.Signal(providing_args=["sender", "app_label", "object_name"])
 
 
 HASH_CACHE_TEMPLATE = 'dynamic_model_hash_%s-%s'
