@@ -28,8 +28,12 @@ def connect_column_migration_signals(model_class, col_attr, get_model_name, get_
     _post_save = build_column_post_save(col_attr, get_model_name, get_table_name, app_label)
     post_save.connect(_post_save, sender=model_class, weak=False)
 
-    _post_delete = build_column_post_delete(col_attr, get_model_name, get_table_name, app_label, soft_delete)
-    post_delete.connect(_post_delete, sender=model_class, weak=False)
+    # Columns are not deleted automatically.
+    # Either a soft_delete is used to move the column out of the way, or nothing happens.
+    # If your system wants to delete the column, it needs to do it itself
+    if soft_delete:
+        _post_delete = build_column_post_delete(col_attr, get_model_name, get_table_name, app_label)
+        post_delete.connect(_post_delete, sender=model_class, weak=False)
 
 
 def connect_table_migration_signals(model_class, model_name_attr, table_name_attr=None, app_label=None, soft_delete=True):
@@ -44,7 +48,7 @@ def connect_table_migration_signals(model_class, model_name_attr, table_name_att
 
     # Tables are not deleted automatically (because of potential problems with related objects)
     # Either a soft_delete is used to move the table out of the way, or nothing happens.
-    # If your system wants to delete the table, it needs to do it manually
+    # If your system wants to delete the table, it needs to do it itself
     if soft_delete:
         _post_delete = build_table_post_delete(model_name_attr, table_name_attr, app_label)
         post_delete.connect(_post_delete, sender=model_class, weak=False)
@@ -109,37 +113,24 @@ def _get_max_deleted_index(names):
         return 0
 
 
-def build_column_post_delete(col_attr, get_model_name, get_table_name, app_label=None, soft_delete=True):
-    if soft_delete:
-        def column_post_delete(sender, instance, **kwargs):
-            table_name = get_table_name(instance)
-            column_name = getattr(instance, col_attr)
-            max_index = _get_max_deleted_index(get_deleted_columns(table_name))
+def build_column_post_delete(col_attr, get_model_name, get_table_name, app_label=None):
+    def column_post_delete(sender, instance, **kwargs):
+        table_name = get_table_name(instance)
+        column_name = getattr(instance, col_attr)
+        max_index = _get_max_deleted_index(get_deleted_columns(table_name))
 
-            # Rename column out of the way
-            new_column_name = DELETED_PREFIX + str(max_index + 1)
-            rename_db_column(table_name, column_name, new_column_name)
+        # Rename column out of the way
+        new_column_name = DELETED_PREFIX + str(max_index + 1)
+        rename_db_column(table_name, column_name, new_column_name)
 
-            # Log this renaming, if this functionality is available
-            if DeletedColumn:
-                log = DeletedColumn()
-                log.original_table_name = table_name
-                log.original_name = column_name
-                log.current_name = new_column_name
-                log.save()
+        # Log this renaming, if this functionality is available
+        if DeletedColumn:
+            log = DeletedColumn()
+            log.original_table_name = table_name
+            log.original_name = column_name
+            log.current_name = new_column_name
+            log.save()
 
-    else:
-        def column_post_delete(sender, instance, **kwargs):
-            table_name = get_table_name(instance)
-            column_name = getattr(instance, col_attr)
-            delete_db_column(table_name, column_name)
-
-            # Log this deletion, if this functionality is available
-            if DeletedColumn:
-                log = DeletedColumn()
-                log.original_table_name = table_name
-                log.original_name = column_name
-                log.save()
 
     return column_post_delete
 
@@ -186,7 +177,6 @@ def build_table_post_save(model_name_attr, table_name_attr=None, app_label=None)
         # Invalidate any old definitions 
         if hasattr(instance, OLD_MODEL_NAME_ATTR):
             model_name = getattr(instance, OLD_MODEL_NAME_ATTR)
-            print "*"*80, "Invalidating old model name", getattr(instance, OLD_MODEL_NAME_ATTR)
         else:
             model_name = getattr(instance, model_name_attr)
 
