@@ -36,10 +36,25 @@ def get_cached_model(app_label, model_name, regenerate=False, local_hash=lambda 
 
 def remove_from_model_cache(app_label, model_name):
     """ Removes the given model from the model cache. """
+
+    # Delete cached model in M2M relationship
+    try:
+        model = app_cache.app_models[app_label][model_name.lower()]
+    except KeyError:
+        pass
+    else:
+        for f, __ in model._meta.get_m2m_with_model():
+            try:
+                del f.rel.to._meta._related_many_to_many_cache
+            except AttributeError:
+                pass
+
+    # Delete from the central model cache
     try:
         del app_cache.app_models[app_label][model_name.lower()]
     except KeyError:
         pass
+
 
 def notify_model_change(model=None, app_label=None, object_name=None, invalidate_only=False, local_hash=lambda i: i._hash):
     """ Notifies other processes that a dynamic model has changed. 

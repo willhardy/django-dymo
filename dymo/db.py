@@ -13,35 +13,6 @@ def update_table(model_class):
     create_db_table(model_class)
     add_necessary_db_columns(model_class)
 
-def create_auto_m2m_tables(model_class):
-    " Create tables for ManyToMany fields "
-    for f in model_class._meta.many_to_many:
-        if f.rel.through:
-            try:
-                # Django 1.2+
-                through = f.rel.through
-            except AttributeError:
-                # Django 1.1 and below
-                through = f.rel.through_model
-
-        if (not f.rel.through) or getattr(through._meta, "auto_created", None):
-
-            # Create the standard implied M2M table
-            m2m_table_name = f.m2m_db_table()
-            if (connection.introspection.table_name_converter(m2m_table_name) 
-                        not in connection.introspection.table_names()):
-                db.start_transaction()
-                m2m_column_name = f.m2m_column_name()[:-3] # without "_id"
-                m2m_reverse_name = f.m2m_reverse_name()[:-3] # without "_id"
-                db.create_table(f.m2m_db_table(), (
-                    ('id', models.AutoField(verbose_name='ID', primary_key=True, auto_created=True)),
-                    (m2m_column_name, models.ForeignKey(model_class, null=False)),
-                    (m2m_reverse_name, models.ForeignKey(f.rel.to, null=False))
-                ))
-                db.create_unique(f.m2m_db_table(), [f.m2m_column_name(), f.m2m_reverse_name()])
-                #db.execute_deferred_sql()
-                db.commit_transaction()
-                logger.debug("Created table '%s'" % m2m_table_name)
 
 def create_db_table(model_class):
     """ Takes a Django model class and create a database table, if necessary.
@@ -65,6 +36,38 @@ def create_db_table(model_class):
     create_auto_m2m_tables(model_class)
 
     db.send_create_signal(model_class._meta.app_label, [model_class._meta.object_name])
+
+
+def create_auto_m2m_tables(model_class):
+    " Create tables for ManyToMany fields "
+    for f in model_class._meta.many_to_many:
+        if f.rel.through:
+            try:
+                # Django 1.2+
+                through = f.rel.through
+            except AttributeError:
+                # Django 1.1 and below
+                through = f.rel.through_model
+
+        if (not f.rel.through) or getattr(through._meta, "auto_created", None):
+
+            # Create the standard implied M2M table
+            m2m_table_name = f.m2m_db_table()
+            if (connection.introspection.table_name_converter(m2m_table_name) 
+                        not in connection.introspection.table_names()):
+
+                db.start_transaction()
+                m2m_column_name = f.m2m_column_name()[:-3] # without "_id"
+                m2m_reverse_name = f.m2m_reverse_name()[:-3] # without "_id"
+                db.create_table(f.m2m_db_table(), (
+                    ('id', models.AutoField(verbose_name='ID', primary_key=True, auto_created=True)),
+                    (m2m_column_name, models.ForeignKey(model_class, null=False)),
+                    (m2m_reverse_name, models.ForeignKey(f.rel.to, null=False))
+                ))
+                db.create_unique(f.m2m_db_table(), [f.m2m_column_name(), f.m2m_reverse_name()])
+                #db.execute_deferred_sql()
+                db.commit_transaction()
+                logger.debug("Created table '%s'" % m2m_table_name)
 
 
 DELETED_PREFIX = "_deleted_"
