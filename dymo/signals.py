@@ -7,11 +7,11 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.db import transaction, connection
 
-from dymo.db import rename_db_column, rename_db_table, delete_db_table, delete_db_column
-from dymo.db import get_deleted_tables, get_deleted_columns, DELETED_PREFIX
+from .db import rename_db_column, rename_db_table, delete_db_table, delete_db_column
+from .db import get_deleted_tables, get_deleted_columns, DELETED_PREFIX
 from south.db import db
-from dymo.sync import notify_model_change
-from dymo.models import DeletedColumn, DeletedTable
+from .sync import notify_model_change
+from .models import DeletedColumn, DeletedTable
 
 OLD_COLUMN_NAME_ATTR = "_dymo_old_column_name"
 OLD_TABLE_NAME_ATTR = "_dymo_old_table_name"

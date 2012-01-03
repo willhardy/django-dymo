@@ -10,7 +10,7 @@ from django.core.management.color import no_style
 from django.core.management.sql import sql_flush
 from south.db import db
 
-from dymo.registry import get_dynamic_models
+from .registry import get_dynamic_models
 
 class TestCase(DjangoTestCase):
 

@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models.fields import NOT_PROVIDED
 from south.db import db
 
-from dymo.registry import get_dynamic_models
+from .registry import get_dynamic_models
 
 class Command(BaseCommand):
     """

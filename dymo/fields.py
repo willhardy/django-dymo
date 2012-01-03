@@ -4,7 +4,7 @@
 from django.db import models, connection
 from django.utils.translation import ugettext_lazy as _
 
-from dymo.validation import validate_identifier_slug
+from .validation import validate_identifier_slug
 
 
 class IdentifierSlugField(models.CharField):
