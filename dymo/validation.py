@@ -51,14 +51,16 @@ def validate_identifier_slug(val):
 
 
 def slug_to_class_name(val):
-    """ Prepare the given value to be used as a python class name. """
+    """ Prepare the given value to be used as a python class name. 
+        Non-ascii characters and leading digits are stripped.
+    """
     val = val.encode('ascii', 'ignore').title()
-    return filter(str.isalpha, val)
+    return filter(lambda s: s.isalnum(), val).lstrip("0123456789")
 
 
 def slug_to_identifier(val):
     """ Prepare the given value to be used as a python or database identifier. """
-    # remove non-ascii, hyphens and lower
+    # remove non-ascii, hyphens and make lowercase
     val = val.encode('ascii', 'ignore').replace("-","_").lower()
 
     # filter our undesired characters
@@ -69,7 +71,8 @@ def slug_to_identifier(val):
     while "__" in val:
         val = val.replace("__", "_")
 
-    return val
+    # Remove leading digits and underscores
+    return val.lstrip("0123456789_")
 
 
 def slug_to_model_field_name(val):
